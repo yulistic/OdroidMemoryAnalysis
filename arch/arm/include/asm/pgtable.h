@@ -203,6 +203,7 @@ static inline void __sync_icache_dcache(pte_t pteval)
 extern void __sync_icache_dcache(pte_t pteval);
 #endif
 
+#if 0
 static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
 			      pte_t *ptep, pte_t pteval)
 {
@@ -213,6 +214,10 @@ static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
 		set_pte_ext(ptep, pteval, PTE_EXT_NG);
 	}
 }
+#else
+void set_pte_at(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, pte_t pteval);
+#endif
 
 #define pte_none(pte)		(!pte_val(pte))
 #define pte_present(pte)	(pte_val(pte) & L_PTE_PRESENT)

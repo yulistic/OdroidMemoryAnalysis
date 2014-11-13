@@ -1218,6 +1218,7 @@ static void __init map_lowmem(void)
 #endif
 }
 
+unsigned long write_fault_cnt;
 /*
  * paging_init() sets up the page tables, initialises the zone memory
  * maps, and sets up the zero page, bad page and bad page tables.
@@ -1243,4 +1244,23 @@ void __init paging_init(struct machine_desc *mdesc)
 
 	empty_zero_page = virt_to_page(zero_page);
 	__flush_dcache_page(NULL, empty_zero_page);
+
+	write_fault_cnt = 0;
 }
+
+void set_pte_at(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, pte_t pteval)
+{
+
+	if (write_fault_cnt == 0) 
+		printk("%s: write_fault_cnt: %ld\n", __func__, ++write_fault_cnt);
+	if (pte_val(pteval) & (1 << 11)) 
+		printk("%s: %lx %x\n", __func__, (unsigned long)ptep, pte_val(pteval));
+	if (addr >= TASK_SIZE)
+		set_pte_ext(ptep, pteval, 0);
+	else {
+		__sync_icache_dcache(pteval);
+		set_pte_ext(ptep, pteval, PTE_EXT_NG);
+	}
+}
+EXPORT_SYMBOL(set_pte_at);
