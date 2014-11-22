@@ -124,6 +124,10 @@
 #define L_PTE_XN		(_AT(pteval_t, 1) << 9)
 #define L_PTE_SHARED		(_AT(pteval_t, 1) << 10)	/* shared(v6), coherent(xsc3) */
 
+/* Added by jykim. */
+#define L_PTE_WDEPRIVED		(_AT(pteval_t, 1) << 11)	/* write permission deprived */
+
+
 /*
  * These are the memory types, defined to be compatible with
  * pre-ARMv6 CPUs cacheable and bufferable bits:   XXCB

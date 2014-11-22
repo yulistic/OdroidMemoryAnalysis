@@ -1219,6 +1219,7 @@ static void __init map_lowmem(void)
 }
 
 unsigned long write_fault_cnt;
+unsigned long itr_cnt;
 /*
  * paging_init() sets up the page tables, initialises the zone memory
  * maps, and sets up the zero page, bad page and bad page tables.
@@ -1246,16 +1247,104 @@ void __init paging_init(struct machine_desc *mdesc)
 	__flush_dcache_page(NULL, empty_zero_page);
 
 	write_fault_cnt = 0;
+	itr_cnt = 0;
 }
 
 void set_pte_at(struct mm_struct *mm, unsigned long addr,
 			      pte_t *ptep, pte_t pteval)
 {
+	/* Check prev.RDONLY bit, prev.WDEPRIVED bit and next.RDONLY bit. */
+	pte_t prev_pteval = *ptep;
+	pte_t prev_pte_rd = pte_val(prev_pteval) & (1 << 7);
+	pte_t prev_pte_wd = pte_val(prev_pteval) & (1 << 11);
+	pte_t next_pte_rd = pte_val(pteval) & (1 << 7);
+	pte_t temp;
+	//unsigned long mask = L_PTE_RDONLY | L_PTE_WDEPRIVED;
 
-	if (write_fault_cnt == 0) 
+
+	// set 11th bit to 1.
+	/*if (write_fault_cnt == 0){
+		temp = (1 << 11);
+		pteval |= temp;
+		printk("%s: 11th bit is set to 1.\n", __func__);
+		write_fault_cnt++;
+	}else if (write_fault_cnt ==1) {
+		printk("%s: prev_pte: %x\n", __func__, pte_val(prev_pteval));
+		write_fault_cnt++;
+	}*/
+
+
+	if(itr_cnt > 300000){
+
+		// Write occurrence count mechanism.
+		if (!prev_pte_rd && !prev_pte_wd) {			
+			// prev RDONLY == 0 and prev WDEPRIVED == 0
+			if (next_pte_rd) {	// next RDONLY ==1
+				//Do nothing.	
+				//printk("prev (0,0), next(1)\n");
+			}else{	// next RDONLY ==0
+				//printk("prev (0,0), next(0) 7 and 11 bit is set to 1.\n");
+				temp = (1 << 7) | (1 << 11);
+				//temp = (1 << 11);
+				pteval |= temp;
+			}
+
+		}else if (!prev_pte_rd && prev_pte_wd) {
+			// prev RDONLY==0 and prev WDEPRIVED==1
+			if (next_pte_rd) {	// next RDONLY ==1
+				//printk("prev (0,1), next(1)\n");
+				temp = (1 << 11);
+				pteval |= temp;
+			}else{	// next RDONLY ==0
+				//printk("prev (0,1), next(0)\n");
+				temp = (1 << 11);
+				pteval |= temp;
+			}
+
+		}else if (prev_pte_rd && !prev_pte_wd) {
+			// prev RDONLY==1 and prev WDEPRIVED==0
+			if (next_pte_rd) {	// next RDONLY ==1
+				//printk("prev (1,0), next(1)\n");
+				//Do nothing.
+			}else{	// next RDONLY ==0
+				//printk("prev (1,0), next(1)\n");
+				temp = (1 << 7) | (1 << 11);
+				//temp = (1 << 11);
+				pteval |= temp;
+			}
+		}else {
+			// prev RDONLY==1 and prev WDEPRIVED==1
+			if (next_pte_rd) {	// next RDONLY ==1
+				//printk("prev (1,1), next(1)\n");
+				temp = (1 << 11);
+				pteval |= temp;
+			}else{	// next RDONLY ==0
+				//printk("prev (1,1), next(1)\n");
+				write_fault_cnt++;
+				temp = (1 << 11);
+				pteval |= temp;
+			}
+		}
+		
+		if((write_fault_cnt % 1000) == 0)
+			printk("%s: write_fault_cnt: %ld\n", __func__, write_fault_cnt);
+
+	}else{
+		itr_cnt++;
+		if((itr_cnt % 10000) == 0)
+			printk("%s: itr_cnt: %ld\n", __func__, itr_cnt);
+	}
+	
+
+	//print write_fault_cnt.
+	/*if (write_fault_cnt % 1000 == 0)
+		printk("%s: write_fault_cnt: %ld\n", __func__, write_fault_cnt);*/
+
+
+	/*if (write_fault_cnt == 0) 
 		printk("%s: write_fault_cnt: %ld\n", __func__, ++write_fault_cnt);
 	if (pte_val(pteval) & (1 << 11)) 
-		printk("%s: %lx %x\n", __func__, (unsigned long)ptep, pte_val(pteval));
+		printk("%s: %lx %x\n", __func__, (unsigned long)ptep, pte_val(pteval));*/
 	if (addr >= TASK_SIZE)
 		set_pte_ext(ptep, pteval, 0);
 	else {

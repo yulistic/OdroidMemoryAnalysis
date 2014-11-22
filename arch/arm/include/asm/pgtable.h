@@ -227,6 +227,9 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 #define pte_exec(pte)		(!(pte_val(pte) & L_PTE_XN))
 #define pte_special(pte)	(0)
 
+//add by jykim.
+#define pte_wdeprived(pte)		(pte_val(pte) & L_PTE_WDEPRIVED)
+
 #define pte_present_user(pte) \
 	((pte_val(pte) & (L_PTE_PRESENT | L_PTE_USER)) == \
 	 (L_PTE_PRESENT | L_PTE_USER))

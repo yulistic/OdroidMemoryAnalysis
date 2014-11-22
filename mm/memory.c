@@ -3444,9 +3444,16 @@ int handle_pte_fault(struct mm_struct *mm,
 	if (unlikely(!pte_same(*pte, entry)))
 		goto unlock;
 	if (flags & FAULT_FLAG_WRITE) {
-		if (!pte_write(entry))
+		//printk("%s: FAULT_FLAG_WRITE!!\n", __func__);
+		if (!pte_write(entry)){
+			//jykim here!
+			if (pte_wdeprived(entry)){
+				printk("[JYKIM] %s: RDONLY=1 && WDEPRIVED=1\n", __func__);
+			}
+			//printk("%s: RDONLY bit is set to 1\n", __func__);
 			return do_wp_page(mm, vma, address,
 					pte, pmd, ptl, entry);
+		}
 		entry = pte_mkdirty(entry);
 	}
 	entry = pte_mkyoung(entry);
