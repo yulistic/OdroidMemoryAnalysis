@@ -1253,7 +1253,28 @@ void __init paging_init(struct machine_desc *mdesc)
 void set_pte_at(struct mm_struct *mm, unsigned long addr,
 			      pte_t *ptep, pte_t pteval)
 {
+	
+	pte_t entry;
+	entry = *ptep;
+	if(pte_present(entry)) {
+		// Kernel tries to change pte.
+		// We do not concerned about this case.
+	}else{
+		// A new pte is going to be set.
+		if (pte_write(entry)){ // RDONLY==0		
+			entry = pte_wrprotect(entry);
+			entry = pte_mkwdeprived(entry);
+			
+		}else {	//RDONLY==1
+			//do nothing.	
+		}
+	}
+
+
+
+
 	/* Check prev.RDONLY bit, prev.WDEPRIVED bit and next.RDONLY bit. */
+
 	pte_t prev_pteval = *ptep;
 	pte_t prev_pte_rd = pte_val(prev_pteval) & (1 << 7);
 	pte_t prev_pte_wd = pte_val(prev_pteval) & (1 << 11);

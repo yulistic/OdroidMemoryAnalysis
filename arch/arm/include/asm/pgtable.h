@@ -244,6 +244,10 @@ PTE_BIT_FUNC(mkdirty,   |= L_PTE_DIRTY);
 PTE_BIT_FUNC(mkold,     &= ~L_PTE_YOUNG);
 PTE_BIT_FUNC(mkyoung,   |= L_PTE_YOUNG);
 
+//jykim added.
+PTE_BIT_FUNC(mkwdeprived,   |= L_PTE_WDEPRIVED); // Set WDEPRIVED bit.
+PTE_BIT_FUNC(clwdeprived,   &= ~L_PTE_WDEPRIVED); // Clear WDEPRIVED bit.
+
 static inline pte_t pte_mkspecial(pte_t pte) { return pte; }
 
 static inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
