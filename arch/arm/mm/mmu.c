@@ -1275,7 +1275,7 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 
 	/* Check prev.RDONLY bit, prev.WDEPRIVED bit and next.RDONLY bit. */
 
-	pte_t prev_pteval = *ptep;
+	/*pte_t prev_pteval = *ptep;
 	pte_t prev_pte_rd = pte_val(prev_pteval) & (1 << 7);
 	pte_t prev_pte_wd = pte_val(prev_pteval) & (1 << 11);
 	pte_t next_pte_rd = pte_val(pteval) & (1 << 7);
@@ -1284,7 +1284,7 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 
 
 	// set 11th bit to 1.
-	/*if (write_fault_cnt == 0){
+	[>if (write_fault_cnt == 0){
 		temp = (1 << 11);
 		pteval |= temp;
 		printk("%s: 11th bit is set to 1.\n", __func__);
@@ -1292,7 +1292,7 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 	}else if (write_fault_cnt ==1) {
 		printk("%s: prev_pte: %x\n", __func__, pte_val(prev_pteval));
 		write_fault_cnt++;
-	}*/
+	}<]
 
 
 	if(itr_cnt > 300000){
@@ -1358,14 +1358,14 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 	
 
 	//print write_fault_cnt.
-	/*if (write_fault_cnt % 1000 == 0)
-		printk("%s: write_fault_cnt: %ld\n", __func__, write_fault_cnt);*/
+	[>if (write_fault_cnt % 1000 == 0)
+		printk("%s: write_fault_cnt: %ld\n", __func__, write_fault_cnt);<]
 
 
-	/*if (write_fault_cnt == 0) 
+	[>if (write_fault_cnt == 0) 
 		printk("%s: write_fault_cnt: %ld\n", __func__, ++write_fault_cnt);
 	if (pte_val(pteval) & (1 << 11)) 
-		printk("%s: %lx %x\n", __func__, (unsigned long)ptep, pte_val(pteval));*/
+		printk("%s: %lx %x\n", __func__, (unsigned long)ptep, pte_val(pteval));<]*/
 	if (addr >= TASK_SIZE)
 		set_pte_ext(ptep, pteval, 0);
 	else {

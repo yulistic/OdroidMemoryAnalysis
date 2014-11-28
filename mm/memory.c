@@ -3447,8 +3447,11 @@ int handle_pte_fault(struct mm_struct *mm,
 		if (!pte_write(entry)){
 			//jykim here!
 			if (pte_wdeprived(entry)){
-				printk("[JYKIM] %s: RDONLY=1 && WDEPRIVED=1\n", __func__);
+				//printk("[JYKIM] %s: RDONLY=1 && WDEPRIVED=1\n", __func__);
 				entry = pte_mkwrite(entry);
+				//TODO 
+
+
 			}
 			//printk("%s: RDONLY bit is set to 1\n", __func__);
 			return do_wp_page(mm, vma, address,
