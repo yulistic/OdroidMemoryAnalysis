@@ -217,6 +217,8 @@ static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
 #else
 void set_pte_at(struct mm_struct *mm, unsigned long addr,
 			      pte_t *ptep, pte_t pteval);
+void set_pte_at_no_cnt(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, pte_t pteval);
 #endif
 
 #define pte_none(pte)		(!pte_val(pte))

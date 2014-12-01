@@ -2425,6 +2425,10 @@ int apply_to_page_range(struct mm_struct *mm, unsigned long addr,
 }
 EXPORT_SYMBOL_GPL(apply_to_page_range);
 
+//jykim.
+unsigned long write_fault_cnt;
+EXPORT_SYMBOL(write_fault_cnt);
+
 /*
  * handle_pte_fault chooses page fault handler according to an entry
  * which was read non-atomically.  Before making any commitment, on
@@ -3401,6 +3405,9 @@ static int do_nonlinear_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	return __do_fault(mm, vma, address, pmd, pgoff, flags, orig_pte);
 }
 
+unsigned long write_fault_cnt;
+extern unsigned long read_only_cnt;
+extern unsigned long write_deprived_cnt;
 /*
  * These routines also need to handle stuff like marking pages dirty
  * and/or accessed for architectures that don't do it in hardware (most
@@ -3437,6 +3444,18 @@ int handle_pte_fault(struct mm_struct *mm,
 					pte, pmd, flags, entry);
 		return do_swap_page(mm, vma, address,
 					pte, pmd, flags, entry);
+	} else if (pte_wdeprived(entry)) {
+		//jykim here!
+		write_fault_cnt++;
+		if (write_fault_cnt % 1000 == 0){
+			printk("[JYKIM] read_only:%ld w_dep:%ld w_fault:%ld\n",
+					read_only_cnt, write_deprived_cnt, write_fault_cnt);
+		}
+		entry = pte_mkwrite(entry);
+		entry = pte_clwdeprived(entry);
+		set_pte_at_no_cnt(vma->vm_mm, address, pte, entry);
+		flush_tlb_page(vma, address);
+		return 0;
 	}
 
 	ptl = pte_lockptr(mm, pmd);
@@ -3445,15 +3464,6 @@ int handle_pte_fault(struct mm_struct *mm,
 		goto unlock;
 	if (flags & FAULT_FLAG_WRITE) {
 		if (!pte_write(entry)){
-			//jykim here!
-			if (pte_wdeprived(entry)){
-				//printk("[JYKIM] %s: RDONLY=1 && WDEPRIVED=1\n", __func__);
-				entry = pte_mkwrite(entry);
-				//TODO 
-
-
-			}
-			//printk("%s: RDONLY bit is set to 1\n", __func__);
 			return do_wp_page(mm, vma, address,
 					pte, pmd, ptl, entry);
 		}

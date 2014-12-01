@@ -1218,8 +1218,8 @@ static void __init map_lowmem(void)
 #endif
 }
 
-unsigned long write_fault_cnt;
-unsigned long itr_cnt;
+unsigned long read_only_cnt;
+unsigned long write_deprived_cnt;
 /*
  * paging_init() sets up the page tables, initialises the zone memory
  * maps, and sets up the zero page, bad page and bad page tables.
@@ -1246,126 +1246,52 @@ void __init paging_init(struct machine_desc *mdesc)
 	empty_zero_page = virt_to_page(zero_page);
 	__flush_dcache_page(NULL, empty_zero_page);
 
-	write_fault_cnt = 0;
-	itr_cnt = 0;
+	read_only_cnt = 0;
+	write_deprived_cnt = 0;
 }
 
 void set_pte_at(struct mm_struct *mm, unsigned long addr,
 			      pte_t *ptep, pte_t pteval)
 {
-	
-	pte_t entry;
-	entry = *ptep;
-	if(pte_present(entry)) {
-		// Kernel tries to change pte.
-		// We do not concerned about this case.
-	}else{
-		// A new pte is going to be set.
-		if (pte_write(entry)){ // RDONLY==0		
-			entry = pte_wrprotect(entry);
-			entry = pte_mkwdeprived(entry);
-			
-		}else {	//RDONLY==1
-			//do nothing.	
+	if (addr < TASK_SIZE){	//user space.
+		pte_t prev_pte;	// previous state.
+		prev_pte = *ptep;
+		if(pte_present(prev_pte)) {
+			// Kernel tries to change pte.
+			// We do not concerned about this case. TODO
+		}else{
+			// A new pte is going to be set.
+			if (pte_write(pteval)){ // RDONLY==0		
+				pteval = pte_wrprotect(pteval);
+				pteval = pte_mkwdeprived(pteval);
+				write_deprived_cnt++;
+
+			}else {	//RDONLY==1
+				//do nothing.	
+				read_only_cnt++;
+			}
 		}
 	}
 
 
-
-
-	/* Check prev.RDONLY bit, prev.WDEPRIVED bit and next.RDONLY bit. */
-
-	/*pte_t prev_pteval = *ptep;
-	pte_t prev_pte_rd = pte_val(prev_pteval) & (1 << 7);
-	pte_t prev_pte_wd = pte_val(prev_pteval) & (1 << 11);
-	pte_t next_pte_rd = pte_val(pteval) & (1 << 7);
-	pte_t temp;
-	//unsigned long mask = L_PTE_RDONLY | L_PTE_WDEPRIVED;
-
-
-	// set 11th bit to 1.
-	[>if (write_fault_cnt == 0){
-		temp = (1 << 11);
-		pteval |= temp;
-		printk("%s: 11th bit is set to 1.\n", __func__);
-		write_fault_cnt++;
-	}else if (write_fault_cnt ==1) {
-		printk("%s: prev_pte: %x\n", __func__, pte_val(prev_pteval));
-		write_fault_cnt++;
-	}<]
-
-
-	if(itr_cnt > 300000){
-
-		// Write occurrence count mechanism.
-		if (!prev_pte_rd && !prev_pte_wd) {			
-			// prev RDONLY == 0 and prev WDEPRIVED == 0
-			if (next_pte_rd) {	// next RDONLY ==1
-				//Do nothing.	
-				//printk("prev (0,0), next(1)\n");
-			}else{	// next RDONLY ==0
-				//printk("prev (0,0), next(0) 7 and 11 bit is set to 1.\n");
-				temp = (1 << 7) | (1 << 11);
-				//temp = (1 << 11);
-				pteval |= temp;
-			}
-
-		}else if (!prev_pte_rd && prev_pte_wd) {
-			// prev RDONLY==0 and prev WDEPRIVED==1
-			if (next_pte_rd) {	// next RDONLY ==1
-				//printk("prev (0,1), next(1)\n");
-				temp = (1 << 11);
-				pteval |= temp;
-			}else{	// next RDONLY ==0
-				//printk("prev (0,1), next(0)\n");
-				temp = (1 << 11);
-				pteval |= temp;
-			}
-
-		}else if (prev_pte_rd && !prev_pte_wd) {
-			// prev RDONLY==1 and prev WDEPRIVED==0
-			if (next_pte_rd) {	// next RDONLY ==1
-				//printk("prev (1,0), next(1)\n");
-				//Do nothing.
-			}else{	// next RDONLY ==0
-				//printk("prev (1,0), next(1)\n");
-				temp = (1 << 7) | (1 << 11);
-				//temp = (1 << 11);
-				pteval |= temp;
-			}
-		}else {
-			// prev RDONLY==1 and prev WDEPRIVED==1
-			if (next_pte_rd) {	// next RDONLY ==1
-				//printk("prev (1,1), next(1)\n");
-				temp = (1 << 11);
-				pteval |= temp;
-			}else{	// next RDONLY ==0
-				//printk("prev (1,1), next(1)\n");
-				write_fault_cnt++;
-				temp = (1 << 11);
-				pteval |= temp;
-			}
-		}
-		
-		if((write_fault_cnt % 1000) == 0)
-			printk("%s: write_fault_cnt: %ld\n", __func__, write_fault_cnt);
-
-	}else{
-		itr_cnt++;
-		if((itr_cnt % 10000) == 0)
-			printk("%s: itr_cnt: %ld\n", __func__, itr_cnt);
+	// Original code of set_pte_at()
+	if (addr >= TASK_SIZE)	// kernel space.
+		set_pte_ext(ptep, pteval, 0);
+	else {	// user space
+		__sync_icache_dcache(pteval);
+		set_pte_ext(ptep, pteval, PTE_EXT_NG);
 	}
-	
+}
+EXPORT_SYMBOL(set_pte_at);
 
-	//print write_fault_cnt.
-	[>if (write_fault_cnt % 1000 == 0)
-		printk("%s: write_fault_cnt: %ld\n", __func__, write_fault_cnt);<]
-
-
-	[>if (write_fault_cnt == 0) 
-		printk("%s: write_fault_cnt: %ld\n", __func__, ++write_fault_cnt);
-	if (pte_val(pteval) & (1 << 11)) 
-		printk("%s: %lx %x\n", __func__, (unsigned long)ptep, pte_val(pteval));<]*/
+/* 
+ * The function for set_pte_at without count.
+ * It is used for set pte value in handle_mm_fault.
+ * To update pte value without counting.
+ */
+void set_pte_at_no_cnt(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, pte_t pteval)
+{
 	if (addr >= TASK_SIZE)
 		set_pte_ext(ptep, pteval, 0);
 	else {
@@ -1373,4 +1299,4 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 		set_pte_ext(ptep, pteval, PTE_EXT_NG);
 	}
 }
-EXPORT_SYMBOL(set_pte_at);
+EXPORT_SYMBOL(set_pte_at_no_cnt);

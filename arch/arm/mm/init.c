@@ -715,6 +715,8 @@ void __init mem_init(void)
 		 */
 		sysctl_overcommit_memory = OVERCOMMIT_ALWAYS;
 	}
+	//jykim.
+	write_fault_cnt = 0;
 }
 
 void free_initmem(void)

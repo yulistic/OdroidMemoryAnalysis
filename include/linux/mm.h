@@ -30,6 +30,8 @@ extern unsigned long max_mapnr;
 #endif
 
 extern unsigned long num_physpages;
+//jykim.
+extern unsigned long write_fault_cnt;
 extern unsigned long totalram_pages;
 extern void * high_memory;
 extern int page_cluster;

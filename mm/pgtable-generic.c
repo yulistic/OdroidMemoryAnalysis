@@ -31,6 +31,24 @@ int ptep_set_access_flags(struct vm_area_struct *vma,
 	}
 	return changed;
 }
+
+/*
+ * jykim.
+ * ptep_set_access_flags using set_pte_at_no_cnt() function 
+ * instead of set_pte_at() function.
+ */
+int ptep_set_access_flags_no_cnt(struct vm_area_struct *vma,
+			  unsigned long address, pte_t *ptep,
+			  pte_t entry, int dirty)
+{
+	int changed = !pte_same(*ptep, entry);
+	if (changed) {
+		printk("[JYKIM] In %s pte value changed.\n", __func__);
+		set_pte_at_no_cnt(vma->vm_mm, address, ptep, entry);
+		flush_tlb_page(vma, address);
+	}
+	return changed;
+}
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_SET_ACCESS_FLAGS
