@@ -7,8 +7,7 @@
 /*
  * demand-loading started 01.12.91 - seems it is high on the list of
  * things wanted, and it should be easy to implement. - Linus
- */
-
+ */ 
 /*
  * Ok, demand-loading was easy, shared pages a little bit tricker. Shared
  * pages started 02.12.91, seems to work. - Linus.
@@ -3405,7 +3404,48 @@ static int do_nonlinear_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	return __do_fault(mm, vma, address, pmd, pgoff, flags, orig_pte);
 }
 
-unsigned long write_fault_cnt;
+/* Get pte with addr */
+pte_t *get_addr_pte(struct mm_struct *mm, unsigned long addr)
+{
+	pgd_t *pgd;
+	pte_t *pte = NULL;
+
+
+	if (!mm)
+		mm = &init_mm;
+
+	pgd = pgd_offset(mm, addr);
+
+	do {
+		pud_t *pud;
+		pmd_t *pmd;
+
+		if (pgd_none(*pgd))
+			break;
+
+		pud = pud_offset(pgd, addr);
+		
+		if (pud_none(*pud))
+			break;
+
+		pmd = pmd_offset(pud, addr);
+
+		if (pmd_none(*pmd))
+			break;
+
+		/* We must not map this if we have highmem enabled */
+		if (PageHighMem(pfn_to_page(pmd_val(*pmd) >> PAGE_SHIFT)))
+			break;
+
+		pte = pte_offset_map(pmd, addr);
+
+		pte_unmap(pte);
+		
+	} while(0);
+	return pte;
+}
+
+
 extern unsigned long read_only_cnt;
 extern unsigned long write_deprived_cnt;
 /*
@@ -3425,6 +3465,7 @@ int handle_pte_fault(struct mm_struct *mm,
 		     struct vm_area_struct *vma, unsigned long address,
 		     pte_t *pte, pmd_t *pmd, unsigned int flags)
 {
+	static unsigned int icnt=0;
 	pte_t entry;
 	spinlock_t *ptl;
 
@@ -3444,8 +3485,27 @@ int handle_pte_fault(struct mm_struct *mm,
 					pte, pmd, flags, entry);
 		return do_swap_page(mm, vma, address,
 					pte, pmd, flags, entry);
-	} else if (pte_wdeprived(entry)) {
+	} else if (pte_wdeprived(entry)) { // added 
 		//jykim here!
+		// Find pte_t * ptep using address.
+		
+		//if (icnt %1000 == 0){
+			printk("[JYKIM]address: %lx, prev_addr:%lx,  prev_pteval:%lx\n", address,mm->prev_addr, mm->prev_pteval);
+		//}
+		//icnt++;
+
+		unsigned long prev_addr = mm->prev_addr;
+		pte_t *prev_pte = get_addr_pte(mm, prev_addr);
+		if (prev_pte == NULL){
+			// previous pte unmapped.
+		}else{
+			// Deprive write permission of previous pte. (Token)
+			pte_t new_pteval = mm->prev_pteval;	
+			new_pteval = pte_wrprotect(new_pteval);	
+			new_pteval = pte_mkwdeprived(new_pteval);
+			set_pte_at_no_cnt(mm, prev_addr, prev_pte, new_pteval);
+		}
+	 		
 		write_fault_cnt++;
 		if (write_fault_cnt % 1000 == 0){
 			printk("[JYKIM] read_only:%ld w_dep:%ld w_fault:%ld\n",
@@ -3454,6 +3514,11 @@ int handle_pte_fault(struct mm_struct *mm,
 		entry = pte_mkwrite(entry);
 		entry = pte_clwdeprived(entry);
 		set_pte_at_no_cnt(vma->vm_mm, address, pte, entry);
+
+		// Store pte which gets write permission.
+		mm->prev_addr = address;
+		mm->prev_pteval = entry;
+
 		flush_tlb_page(vma, address);
 		return 0;
 	}

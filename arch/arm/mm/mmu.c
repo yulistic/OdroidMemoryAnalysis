@@ -1262,9 +1262,24 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 		}else{
 			// A new pte is going to be set.
 			if (pte_write(pteval)){ // RDONLY==0		
-				pteval = pte_wrprotect(pteval);
-				pteval = pte_mkwdeprived(pteval);
-				write_deprived_cnt++;
+				//unsigned long pfn; 
+
+				// Get page with pte.
+				//pfn = pte_pfn(pteval);
+				//if (!pfn_valid(pfn)){
+					//printk("[JYKIM] %s: invalid pfn!!\n", __func__);
+				//}else{
+					// Get page with pfn.
+					//struct page *page;
+					//page = pfn_to_page(pfn);
+					//printk("[JYKIM] page_mapcount:%ld\n",
+							//page_mapcount(page));
+					//if (page_mapcount(page) == 0){//Do not deprive when map count >= 2
+						pteval = pte_wrprotect(pteval);
+						pteval = pte_mkwdeprived(pteval);
+						write_deprived_cnt++;
+					//}
+				//}
 
 			}else {	//RDONLY==1
 				//do nothing.	
