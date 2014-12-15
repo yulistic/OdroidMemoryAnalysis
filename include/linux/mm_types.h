@@ -295,6 +295,11 @@ struct mm_rss_stat {
 	atomic_long_t count[NR_MM_COUNTERS];
 };
 
+// jykim
+// TOTAL_TOKEN_NUMBER should be greater than 8192.
+// If not, Android doesn't booted.
+#define TOTAL_TOKEN_NUMBER 8192
+
 struct mm_struct {
 	struct vm_area_struct * mmap;		/* list of VMAs */
 	struct rb_root mm_rb;
@@ -398,9 +403,14 @@ struct mm_struct {
 #ifdef CONFIG_CPUMASK_OFFSTACK
 	struct cpumask cpumask_allocation;
 #endif
+
 	//jykim
-	unsigned long prev_addr;
-	pte_t prev_pteval;
+	// Arrays to store previous token data.
+	pte_t prev_ptevals[TOTAL_TOKEN_NUMBER];
+	unsigned long prev_addrs[TOTAL_TOKEN_NUMBER];
+	unsigned long token_head;
+	unsigned long token_tail;
+	spinlock_t token_cnt_lock;
 };
 
 static inline void mm_init_cpumask(struct mm_struct *mm)

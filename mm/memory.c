@@ -64,6 +64,9 @@
 #include <asm/tlbflush.h>
 #include <asm/pgtable.h>
 
+// jykim.
+#include <linux/circ_buf.h>
+
 #include "internal.h"
 
 #ifndef CONFIG_NEED_MULTIPLE_NODES
@@ -3404,8 +3407,9 @@ static int do_nonlinear_fault(struct mm_struct *mm, struct vm_area_struct *vma,
 	return __do_fault(mm, vma, address, pmd, pgoff, flags, orig_pte);
 }
 
+
 /* Get pte with addr */
-pte_t *get_addr_pte(struct mm_struct *mm, unsigned long addr)
+pte_t *get_addr_pte(struct mm_struct *mm, pmd_t **prev_pmd, unsigned long addr)
 {
 	pgd_t *pgd;
 	pte_t *pte = NULL;
@@ -3433,6 +3437,8 @@ pte_t *get_addr_pte(struct mm_struct *mm, unsigned long addr)
 		if (pmd_none(*pmd))
 			break;
 
+		*prev_pmd = pmd;
+
 		/* We must not map this if we have highmem enabled */
 		if (PageHighMem(pfn_to_page(pmd_val(*pmd) >> PAGE_SHIFT)))
 			break;
@@ -3448,6 +3454,7 @@ pte_t *get_addr_pte(struct mm_struct *mm, unsigned long addr)
 
 extern unsigned long read_only_cnt;
 extern unsigned long write_deprived_cnt;
+
 /*
  * These routines also need to handle stuff like marking pages dirty
  * and/or accessed for architectures that don't do it in hardware (most
@@ -3465,7 +3472,7 @@ int handle_pte_fault(struct mm_struct *mm,
 		     struct vm_area_struct *vma, unsigned long address,
 		     pte_t *pte, pmd_t *pmd, unsigned int flags)
 {
-	static unsigned int icnt=0;
+	static unsigned long icnt = 0;
 	pte_t entry;
 	spinlock_t *ptl;
 
@@ -3486,40 +3493,87 @@ int handle_pte_fault(struct mm_struct *mm,
 		return do_swap_page(mm, vma, address,
 					pte, pmd, flags, entry);
 	} else if (pte_wdeprived(entry)) { // added 
-		//jykim here!
-		// Find pte_t * ptep using address.
+		// jykim.
+		pmd_t *prev_pmd = NULL;
+		bool wdeprived; // is write permission deprived.
+		ptl = pte_lockptr(mm, pmd);
+		spin_lock(ptl);
+
+		wdeprived = pte_wdeprived(entry);
+		if (wdeprived){
+			// Give write permission.
+			entry = pte_mkwrite(entry);
+			entry = pte_clwdeprived(entry);
+			set_pte_at_no_cnt(vma->vm_mm, address, pte, entry);
+			flush_tlb_page(vma, address);
+		}
+		spin_unlock(ptl);
 		
-		//if (icnt %1000 == 0){
-			printk("[JYKIM]address: %lx, prev_addr:%lx,  prev_pteval:%lx\n", address,mm->prev_addr, mm->prev_pteval);
-		//}
-		//icnt++;
+		// Find pte_t * ptep using address.
+		spin_lock(&vma->vm_mm->token_cnt_lock);
 
-		unsigned long prev_addr = mm->prev_addr;
-		pte_t *prev_pte = get_addr_pte(mm, prev_addr);
-		if (prev_pte == NULL){
-			// previous pte unmapped.
-		}else{
-			// Deprive write permission of previous pte. (Token)
-			pte_t new_pteval = mm->prev_pteval;	
-			new_pteval = pte_wrprotect(new_pteval);	
-			new_pteval = pte_mkwdeprived(new_pteval);
-			set_pte_at_no_cnt(mm, prev_addr, prev_pte, new_pteval);
+		// POP from token queue and deprive write permission if needed.
+		if (CIRC_CNT(vma->vm_mm->token_head, vma->vm_mm->token_tail, 
+					TOTAL_TOKEN_NUMBER) >= (TOTAL_TOKEN_NUMBER -1)){
+			unsigned long prev_addr = vma->vm_mm->prev_addrs[vma->vm_mm->token_tail];
+			pte_t saved_pte = vma->vm_mm->prev_ptevals[vma->vm_mm->token_tail];
+			pte_t *prev_pte = get_addr_pte(vma->vm_mm, &prev_pmd, prev_addr);
+
+			if (prev_pmd != NULL){
+				pte_t pteval_orig;
+				ptl = pte_lockptr(mm, prev_pmd);
+				spin_lock(ptl);
+
+				pteval_orig = *prev_pte;
+				if (pte_pfn(saved_pte) != pte_pfn(pteval_orig)){
+					// Do nothing. The pte has been remapped to other frame.
+
+				} else if (prev_pte != NULL && pte_present(pte_val(*prev_pte))
+						&& pte_write(pte_val(*prev_pte))){
+					pte_t new_pteval = pte_val(*prev_pte);	
+					if (!pte_same(pteval_orig, new_pteval))
+							printk("****************************************\n");
+					new_pteval = pte_wrprotect(new_pteval);	
+					new_pteval = pte_mkwdeprived(new_pteval);
+					set_pte_at_no_cnt(vma->vm_mm, prev_addr, prev_pte, new_pteval);
+					flush_tlb_page(vma, prev_addr);
+
+					//if (vma->vm_mm->token_tail%100 == 0)
+					//printk("[JYKIM_PTEVAL] pid:%u token:%lu, addr: %lx, prev_pte:%lx "
+							//"pteval_new:%lx, pteval_orig:%lx\n", task_pid_nr(current), 
+							//vma->vm_mm->token_tail, address, 
+							//(unsigned long)prev_pte, new_pteval, pteval_orig);
+
+				}
+				spin_unlock(ptl);
+			}
+			smp_mb();
+			vma->vm_mm->token_tail = (vma->vm_mm->token_tail + 1) & (TOTAL_TOKEN_NUMBER -1);
 		}
-	 		
-		write_fault_cnt++;
-		if (write_fault_cnt % 1000 == 0){
-			printk("[JYKIM] read_only:%ld w_dep:%ld w_fault:%ld\n",
-					read_only_cnt, write_deprived_cnt, write_fault_cnt);
+
+		// PUSH a new pte to token queue.
+		if (wdeprived 
+				&& CIRC_SPACE(vma->vm_mm->token_head, vma->vm_mm->token_tail, 
+					TOTAL_TOKEN_NUMBER)	>= 1){
+			vma->vm_mm->prev_addrs[vma->vm_mm->token_head] = address;
+			vma->vm_mm->prev_ptevals[vma->vm_mm->token_head] = entry;
+
+			//printk("[JYKIM_PTEVAL_PUSH] pid:%u token:%lu, addr: %lx,  prev_pte:%lx pteval:%lx\n",
+					//task_pid_nr(current), vma->vm_mm->token_head, address, 
+					//(unsigned long)pte, entry);
+
+			smp_wmb();
+			vma->vm_mm->token_head = (vma->vm_mm->token_head+1) & (TOTAL_TOKEN_NUMBER - 1);
+
+			// Count write fault.
+			write_fault_cnt++;
+			if (write_fault_cnt % 1000 == 0){
+				/*printk("[JYKIM] read_only:%lu w_dep:%lu w_fault:%lu\n",*/
+				/*read_only_cnt, write_deprived_cnt, write_fault_cnt);*/
+			}
 		}
-		entry = pte_mkwrite(entry);
-		entry = pte_clwdeprived(entry);
-		set_pte_at_no_cnt(vma->vm_mm, address, pte, entry);
+		spin_unlock(&vma->vm_mm->token_cnt_lock);
 
-		// Store pte which gets write permission.
-		mm->prev_addr = address;
-		mm->prev_pteval = entry;
-
-		flush_tlb_page(vma, address);
 		return 0;
 	}
 

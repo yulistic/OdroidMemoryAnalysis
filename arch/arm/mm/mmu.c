@@ -1220,6 +1220,7 @@ static void __init map_lowmem(void)
 
 unsigned long read_only_cnt;
 unsigned long write_deprived_cnt;
+
 /*
  * paging_init() sets up the page tables, initialises the zone memory
  * maps, and sets up the zero page, bad page and bad page tables.
@@ -1256,9 +1257,15 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 	if (addr < TASK_SIZE){	//user space.
 		pte_t prev_pte;	// previous state.
 		prev_pte = *ptep;
-		if(pte_present(prev_pte)) {
+		if(pte_present(prev_pte)) { 
+			//if (!pte_write(prev_pte) &&	pte_write(pteval)) {
+			if (pte_write(pteval)) {
 			// Kernel tries to change pte.
 			// We do not concerned about this case. TODO
+				pteval = pte_wrprotect(pteval);
+				pteval = pte_mkwdeprived(pteval);
+				write_deprived_cnt++;
+			} 
 		}else{
 			// A new pte is going to be set.
 			if (pte_write(pteval)){ // RDONLY==0		

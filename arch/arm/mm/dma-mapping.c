@@ -248,6 +248,8 @@ __dma_alloc_remap(struct page *page, size_t size, gfp_t gfp, pgprot_t prot,
 		int idx = CONSISTENT_PTE_INDEX(c->vm_start);
 		u32 off = CONSISTENT_OFFSET(c->vm_start) & (PTRS_PER_PTE-1);
 
+		printk("[JYKIM_dma~] c->vm_start:%lx\n", c->vm_start);
+
 		pte = consistent_pte[idx] + off;
 		c->vm_pages = page;
 
