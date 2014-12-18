@@ -3492,7 +3492,7 @@ int handle_pte_fault(struct mm_struct *mm,
 					pte, pmd, flags, entry);
 		return do_swap_page(mm, vma, address,
 					pte, pmd, flags, entry);
-	} else if (pte_wdeprived(entry)) { // added 
+	} else if (pte_wdeprived(entry) && (flags & FAULT_FLAG_WRITE)) { // added 
 		// jykim.
 		pmd_t *prev_pmd = NULL;
 		bool wdeprived; // is write permission deprived.
@@ -3564,6 +3564,19 @@ int handle_pte_fault(struct mm_struct *mm,
 
 			smp_wmb();
 			vma->vm_mm->token_head = (vma->vm_mm->token_head+1) & (TOTAL_TOKEN_NUMBER - 1);
+
+			// kwkoh.
+			// loging to fault_logger.
+			{
+				unsigned long pfn;
+				struct timeval tv;
+				extern void (*fault_logger_enqueue)
+					(unsigned long, struct timeval *);
+
+				do_gettimeofday(&tv);
+				pfn = pte_pfn(entry);
+				fault_logger_enqueue(pfn, &tv);
+			}
 
 			// Count write fault.
 			write_fault_cnt++;

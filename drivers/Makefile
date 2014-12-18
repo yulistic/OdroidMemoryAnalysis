@@ -140,3 +140,6 @@ obj-$(CONFIG_MOBICORE_DRIVER)	+= gud/
 
 # Hardkernel Specific
 obj-$(CONFIG_MACH_ODROIDXU)	+= hardkernel/
+
+# Fault-Log
+obj-y				+= fault_log/

@@ -35,6 +35,14 @@
 #include "mm.h"
 
 /*
+ * fault logger
+ */
+void (*fault_logger_enqueue)(unsigned long, struct timeval *);
+int (*fault_logger_dequeue)(unsigned long *, struct timeval *);
+EXPORT_SYMBOL(fault_logger_enqueue);
+EXPORT_SYMBOL(fault_logger_dequeue);
+
+/*
  * empty_zero_page is a special page that is used for
  * zero-initialized data and COW.
  */
@@ -1249,51 +1257,55 @@ void __init paging_init(struct machine_desc *mdesc)
 
 	read_only_cnt = 0;
 	write_deprived_cnt = 0;
+
+	fault_logger_enqueue = NULL;
+	fault_logger_dequeue = NULL;
 }
 
 void set_pte_at(struct mm_struct *mm, unsigned long addr,
 			      pte_t *ptep, pte_t pteval)
 {
+	if (!fault_logger_enqueue && addr < TASK_SIZE)
+		printk("fault_logger not initialized. "
+			"address: %lx\n", addr);
+
 	if (addr < TASK_SIZE){	//user space.
 		pte_t prev_pte;	// previous state.
+		unsigned long pfn;
+		struct page *page;
+
+		pfn = pte_pfn(pteval);
+		page = pfn_to_page(pfn);
+			
 		prev_pte = *ptep;
 		if(pte_present(prev_pte)) { 
 			//if (!pte_write(prev_pte) &&	pte_write(pteval)) {
 			if (pte_write(pteval)) {
-			// Kernel tries to change pte.
-			// We do not concerned about this case. TODO
+				// Kernel tries to change pte.
+				struct timeval tv;
+				do_gettimeofday(&tv);
+				fault_logger_enqueue(pfn, &tv);
+
 				pteval = pte_wrprotect(pteval);
 				pteval = pte_mkwdeprived(pteval);
 				write_deprived_cnt++;
-			} 
+			}
 		}else{
 			// A new pte is going to be set.
 			if (pte_write(pteval)){ // RDONLY==0		
-				//unsigned long pfn; 
+				struct timeval tv;
+				do_gettimeofday(&tv);
+				fault_logger_enqueue(pfn, &tv);
 
-				// Get page with pte.
-				//pfn = pte_pfn(pteval);
-				//if (!pfn_valid(pfn)){
-					//printk("[JYKIM] %s: invalid pfn!!\n", __func__);
-				//}else{
-					// Get page with pfn.
-					//struct page *page;
-					//page = pfn_to_page(pfn);
-					//printk("[JYKIM] page_mapcount:%ld\n",
-							//page_mapcount(page));
-					//if (page_mapcount(page) == 0){//Do not deprive when map count >= 2
-						pteval = pte_wrprotect(pteval);
-						pteval = pte_mkwdeprived(pteval);
-						write_deprived_cnt++;
-					//}
-				//}
-
+				pteval = pte_wrprotect(pteval);
+				pteval = pte_mkwdeprived(pteval);
+				write_deprived_cnt++;
 			}else {	//RDONLY==1
 				//do nothing.	
 				read_only_cnt++;
 			}
 		}
-	}
+		}
 
 
 	// Original code of set_pte_at()
@@ -1314,6 +1326,10 @@ EXPORT_SYMBOL(set_pte_at);
 void set_pte_at_no_cnt(struct mm_struct *mm, unsigned long addr,
 			      pte_t *ptep, pte_t pteval)
 {
+	if (!fault_logger_enqueue && addr < TASK_SIZE)
+		printk("fault_logger not initialized. "
+			"address: %lx\n", addr);
+
 	if (addr >= TASK_SIZE)
 		set_pte_ext(ptep, pteval, 0);
 	else {
