@@ -3455,6 +3455,17 @@ int handle_pte_fault(struct mm_struct *mm,
 		entry = pte_clwdeprived(entry);
 		set_pte_at_no_cnt(vma->vm_mm, address, pte, entry);
 		flush_tlb_page(vma, address);
+
+		{
+			unsigned long pfn;
+			struct timeval tv;
+			extern void (*fault_logger_enqueue)
+				(unsigned long, struct timeval *);
+			
+			do_gettimeofday(&tv);
+			pfn = pte_pfn(entry);
+			fault_logger_enqueue(pfn, &tv);
+		}
 		return 0;
 	}
 
