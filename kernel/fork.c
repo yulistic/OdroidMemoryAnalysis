@@ -517,6 +517,15 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p)
 	spin_lock_init(&mm->page_table_lock);
 	//jykim
 	spin_lock_init(&mm->token_cnt_lock);
+
+	spin_lock(&mm->token_cnt_lock);
+	//memset(&mm->prev_addrs, 0, sizeof(mm->prev_addrs));
+	//memset(&mm->prev_ptevals, 0, sizeof(mm->prev_ptevals));
+	mm->token_head = 0;
+	mm->token_tail = 0;
+	spin_unlock(&mm->token_cnt_lock);
+
+
 	mm->free_area_cache = TASK_UNMAPPED_BASE;
 	mm->cached_hole_size = ~0UL;
 	mm_init_aio(mm);

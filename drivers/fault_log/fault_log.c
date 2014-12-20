@@ -157,13 +157,15 @@ static ssize_t fl_read(struct file *filp, char __user *buf,
 static ssize_t fl_write(struct file *filp, const char __user *buf,
 			size_t count, loff_t *ppos)
 {
-	struct timeval tv;
-	static unsigned long pfn = 0;
+	extern bool WDP_ON;
+	WDP_ON = true;
+	/*struct timeval tv;*/
+	/*static unsigned long pfn = 0;*/
 
-	do_gettimeofday(&tv);
-	printk("%s 0x%lx %ld.%06ld\n", __func__, 
-				pfn, tv.tv_sec, tv.tv_usec);
-	fault_log_enqueue(pfn++, &tv);
+	/*do_gettimeofday(&tv);*/
+	/*printk("%s 0x%lx %ld.%06ld\n", __func__, */
+				/*pfn, tv.tv_sec, tv.tv_usec);*/
+	/*fault_log_enqueue(pfn++, &tv);*/
 
 	return count;
 }

@@ -3424,18 +3424,24 @@ pte_t *get_addr_pte(struct mm_struct *mm, pmd_t **prev_pmd, unsigned long addr)
 		pud_t *pud;
 		pmd_t *pmd;
 
-		if (pgd_none(*pgd))
+		if (pgd_none(*pgd)){
+			printk("[JYKIM_PGD_NONE] pgd_none\n");
 			break;
+		}
 
 		pud = pud_offset(pgd, addr);
 		
-		if (pud_none(*pud))
+		if (pud_none(*pud)){
+			printk("[JYKIM_PUD_NONE] pud_none\n");
 			break;
+		}
 
 		pmd = pmd_offset(pud, addr);
 
-		if (pmd_none(*pmd))
+		if (pmd_none(*pmd)){
+			//printk("[JYKIM_PMD_NONE] pmd_none\n");
 			break;
+		}
 
 		*prev_pmd = pmd;
 
@@ -3518,12 +3524,18 @@ int handle_pte_fault(struct mm_struct *mm,
 			unsigned long prev_addr = vma->vm_mm->prev_addrs[vma->vm_mm->token_tail];
 			pte_t saved_pte = vma->vm_mm->prev_ptevals[vma->vm_mm->token_tail];
 			pte_t *prev_pte = get_addr_pte(vma->vm_mm, &prev_pmd, prev_addr);
+			
+			//printk("[JYKIM_PTEVAL_POP] pname:%s, pid:%u head:%lu, tail:%lu, addr: %lx, prev_pte:%lx "
+					//"\n", current->comm,
+					//task_pid_nr(current), vma->vm_mm->token_head, vma->vm_mm->token_tail,
+					//address, (unsigned long)prev_pte);
+
 
 			if (prev_pmd != NULL){
 				pte_t pteval_orig;
 				ptl = pte_lockptr(mm, prev_pmd);
 				spin_lock(ptl);
-
+				
 				pteval_orig = *prev_pte;
 				if (pte_pfn(saved_pte) != pte_pfn(pteval_orig)){
 					// Do nothing. The pte has been remapped to other frame.
@@ -3538,14 +3550,33 @@ int handle_pte_fault(struct mm_struct *mm,
 					set_pte_at_no_cnt(vma->vm_mm, prev_addr, prev_pte, new_pteval);
 					flush_tlb_page(vma, prev_addr);
 
-					//if (vma->vm_mm->token_tail%100 == 0)
-					//printk("[JYKIM_PTEVAL] pid:%u token:%lu, addr: %lx, prev_pte:%lx "
-							//"pteval_new:%lx, pteval_orig:%lx\n", task_pid_nr(current), 
-							//vma->vm_mm->token_tail, address, 
-							//(unsigned long)prev_pte, new_pteval, pteval_orig);
+					struct page *p = pfn_to_page(pte_pfn(*prev_pte));
+					int page_cnt = page_count(p);
+
+					/*if (vma->vm_mm->token_tail%100 == 50)*/
+						/*printk("[JYKIM_PTEVAL_POP]%d pname:%s, pid:%u token:%lu, addr: %lx, prev_pte:%lx "*/
+								/*"pteval_new:%lx, pteval_orig:%lx, page_cnt:%d\n", smp_processor_id(), current->comm,*/
+								/*task_pid_nr(current), vma->vm_mm->token_tail, address, */
+								/*(unsigned long)prev_pte, new_pteval, pteval_orig, page_cnt);*/
 
 				}
 				spin_unlock(ptl);
+			}else{
+				// prev_pmd == NULL.
+				//printk("[JYKIM_ERROR] %d,  pid:%u, name:%s, head:%lu, tail:%lu, prev_pmd == NULL. prev_addr:%lx, curr_addr:%lx, curr_entry:%lx\n", 
+						//smp_processor_id(),task_pid_nr(current), current->comm, vma->vm_mm->token_head,
+						//vma->vm_mm->token_tail, prev_addr, address, (unsigned long)entry);
+
+				// Initialization of mm struct.
+				//memset(&mm->prev_addrs, 0, sizeof(mm->prev_addrs));
+				//memset(&mm->prev_ptevals, 0, sizeof(mm->prev_ptevals));
+				//mm->token_head = 0;
+				//mm->token_tail = 0;
+
+				//spin_unlock(&vma->vm_mm->token_cnt_lock);
+				//return 0;
+
+				//BUG();
 			}
 			smp_mb();
 			vma->vm_mm->token_tail = (vma->vm_mm->token_tail + 1) & (TOTAL_TOKEN_NUMBER -1);
@@ -3558,8 +3589,10 @@ int handle_pte_fault(struct mm_struct *mm,
 			vma->vm_mm->prev_addrs[vma->vm_mm->token_head] = address;
 			vma->vm_mm->prev_ptevals[vma->vm_mm->token_head] = entry;
 
-			//printk("[JYKIM_PTEVAL_PUSH] pid:%u token:%lu, addr: %lx,  prev_pte:%lx pteval:%lx\n",
-					//task_pid_nr(current), vma->vm_mm->token_head, address, 
+			//if ((address & 0xfffff000) == 0xbefff000)
+			//if (vma->vm_mm->token_tail%1000 == 50 ||vma->vm_mm->token_head%1000 == 50)
+				//printk("[JYKIM_PTEVAL_PUSH] %d pname:%s, pid:%u, head:%lu, tail:%lu, addr: %lx,  prev_pte:%lx pteval:%lx\n",
+					//smp_processor_id(), current->comm, task_pid_nr(current), vma->vm_mm->token_head, vma->vm_mm->token_tail, address, 
 					//(unsigned long)pte, entry);
 
 			smp_wmb();

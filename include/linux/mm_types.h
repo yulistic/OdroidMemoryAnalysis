@@ -298,7 +298,14 @@ struct mm_rss_stat {
 // jykim
 // TOTAL_TOKEN_NUMBER should be greater than 8192.
 // If not, Android doesn't booted.
-#define TOTAL_TOKEN_NUMBER 8192
+//#define TOTAL_TOKEN_NUMBER 8192
+//#define TOTAL_TOKEN_NUMBER 4096
+//#define TOTAL_TOKEN_NUMBER 2048
+#define TOTAL_TOKEN_NUMBER 1024
+//#define TOTAL_TOKEN_NUMBER 512
+//#define TOTAL_TOKEN_NUMBER 256
+//#define TOTAL_TOKEN_NUMBER 64
+//#define TOTAL_TOKEN_NUMBER 32
 
 struct mm_struct {
 	struct vm_area_struct * mmap;		/* list of VMAs */

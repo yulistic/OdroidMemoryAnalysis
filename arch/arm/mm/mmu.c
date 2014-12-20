@@ -1228,6 +1228,8 @@ static void __init map_lowmem(void)
 
 unsigned long read_only_cnt;
 unsigned long write_deprived_cnt;
+bool WDP_ON;
+EXPORT_SYMBOL(WDP_ON);
 
 /*
  * paging_init() sets up the page tables, initialises the zone memory
@@ -1260,11 +1262,16 @@ void __init paging_init(struct machine_desc *mdesc)
 
 	fault_logger_enqueue = NULL;
 	fault_logger_dequeue = NULL;
+	WDP_ON = false;
 }
 
 void set_pte_at(struct mm_struct *mm, unsigned long addr,
 			      pte_t *ptep, pte_t pteval)
 {
+	if (!WDP_ON){
+		return set_pte_at_no_cnt(mm, addr, ptep, pteval);
+	}
+
 	if (!fault_logger_enqueue && addr < TASK_SIZE)
 		printk("fault_logger not initialized. "
 			"address: %lx\n", addr);
@@ -1276,16 +1283,12 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 
 		pfn = pte_pfn(pteval);
 		page = pfn_to_page(pfn);
-			
+
 		prev_pte = *ptep;
 		if(pte_present(prev_pte)) { 
 			//if (!pte_write(prev_pte) &&	pte_write(pteval)) {
 			if (pte_write(pteval)) {
 				// Kernel tries to change pte.
-				struct timeval tv;
-				do_gettimeofday(&tv);
-				fault_logger_enqueue(pfn, &tv);
-
 				pteval = pte_wrprotect(pteval);
 				pteval = pte_mkwdeprived(pteval);
 				write_deprived_cnt++;
@@ -1293,10 +1296,6 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 		}else{
 			// A new pte is going to be set.
 			if (pte_write(pteval)){ // RDONLY==0		
-				struct timeval tv;
-				do_gettimeofday(&tv);
-				fault_logger_enqueue(pfn, &tv);
-
 				pteval = pte_wrprotect(pteval);
 				pteval = pte_mkwdeprived(pteval);
 				write_deprived_cnt++;
@@ -1305,7 +1304,7 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 				read_only_cnt++;
 			}
 		}
-		}
+	}
 
 
 	// Original code of set_pte_at()
