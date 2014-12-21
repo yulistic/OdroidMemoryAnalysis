@@ -38,9 +38,7 @@
  * fault logger
  */
 void (*fault_logger_enqueue)(unsigned long, struct timeval *);
-int (*fault_logger_dequeue)(unsigned long *, struct timeval *);
 EXPORT_SYMBOL(fault_logger_enqueue);
-EXPORT_SYMBOL(fault_logger_dequeue);
 
 /*
  * empty_zero_page is a special page that is used for
@@ -1261,7 +1259,6 @@ void __init paging_init(struct machine_desc *mdesc)
 	write_deprived_cnt = 0;
 
 	fault_logger_enqueue = NULL;
-	fault_logger_dequeue = NULL;
 	WDP_ON = false;
 }
 

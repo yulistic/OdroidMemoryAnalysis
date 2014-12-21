@@ -23,6 +23,9 @@ spinlock_t	fault_log_dequeue_lock;
 typedef struct fault_log_struct {
 	struct timeval 	tv;
 	unsigned long	pfn;
+	pid_t pid;
+	char comm[TASK_COMM_LEN];
+
 } fault_log_t;
 DECLARE_WAIT_QUEUE_HEAD(fault_log_wq);
 
@@ -59,6 +62,8 @@ void fault_log_enqueue(unsigned long pfn, struct timeval *tv)
 	f = (fault_log_t *)fault_log.buf + head;
 	f->pfn = pfn;
 	f->tv = *tv;
+	f->pid = current->pid;
+	snprintf(f->comm, TASK_COMM_LEN, "%s", current->comm);
 
 	smp_wmb();
 	fault_log.head = (head + 1) & (FAULT_LOG_SIZE - 1);
@@ -68,7 +73,7 @@ void fault_log_enqueue(unsigned long pfn, struct timeval *tv)
 	spin_unlock(&fault_log_enqueue_lock);
 }
 
-int fault_log_dequeue(unsigned long *pfn, struct timeval *tv)
+int fault_log_dequeue(fault_log_t *fault)
 {
 	unsigned long head;
 	unsigned long tail;
@@ -86,8 +91,10 @@ int fault_log_dequeue(unsigned long *pfn, struct timeval *tv)
 	smp_read_barrier_depends();
 
 	f = (fault_log_t *)fault_log.buf + tail;
-	*pfn = f->pfn;
-	*tv = f->tv;
+	fault->pfn = f->pfn;
+	fault->tv = f->tv;
+	fault->pid = f->pid;
+	snprintf(fault->comm, TASK_COMM_LEN, "%s", f->comm);
 
 	smp_mb();
 	fault_log.tail = (tail + 1) & (FAULT_LOG_SIZE - 1);
@@ -128,18 +135,17 @@ static ssize_t fl_read(struct file *filp, char __user *buf,
 	ssize_t bytes = 0;
 	int err = 0, ret, offset;
 	unsigned long remained_bytes;
-	unsigned long pfn;
-	struct timeval tv;
+	fault_log_t f;
 
 	mutex_lock(&fl_read_mutex);
 	
 	do {
-		ret = fault_log_dequeue(&pfn, &tv);
+		ret = fault_log_dequeue(&f);
 		if (ret == 0)
 			break;
 		bytes += snprintf(fl_buf + bytes, 4096 - bytes, 
-				"0x%lx %ld.%06ld\n", 
-				pfn, tv.tv_sec, tv.tv_usec);
+				"%d %s 0x%lx %ld.%06ld\n",
+				f.pid, f.comm, f.pfn, f.tv.tv_sec, f.tv.tv_usec);
 	} while (bytes < 4000);
 
 	remained_bytes = bytes;
@@ -182,8 +188,6 @@ static int __init fault_log_init(void)
 	struct device *err_dev;
 	extern void (*fault_logger_enqueue)
 				(unsigned long, struct timeval *);
-	extern int (*fault_logger_dequeue)
-				(unsigned long *, struct timeval *);
 
 	fl_major = register_chrdev(0, FL_DEVICE_NAME, &fault_log_fops);
 	if (fl_major < 0) {
@@ -216,7 +220,6 @@ static int __init fault_log_init(void)
 
 	// register the en/dequeue functions
 	fault_logger_enqueue = fault_log_enqueue;
-	fault_logger_dequeue = fault_log_dequeue;
 	
 	printk("fault logger initialized\n");
 
@@ -227,11 +230,8 @@ static void __exit fault_log_exit(void)
 {
 	extern void (*fault_logger_enqueue)
 				(unsigned long, struct timeval *);
-	extern int (*fault_logger_dequeue)
-				(unsigned long *, struct timeval *);
 
 	fault_logger_enqueue = NULL;
-	fault_logger_dequeue = NULL;
 
 	device_destroy(fl_class, MKDEV(fl_major, 0));
 	class_unregister(fl_class);
