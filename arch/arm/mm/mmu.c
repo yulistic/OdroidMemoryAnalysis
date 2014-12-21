@@ -37,7 +37,7 @@
 /*
  * fault logger
  */
-void (*fault_logger_enqueue)(unsigned long, struct timeval *);
+void (*fault_logger_enqueue)(unsigned long, struct timeval *, bool);
 EXPORT_SYMBOL(fault_logger_enqueue);
 
 /*
@@ -1289,6 +1289,16 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 				pteval = pte_wrprotect(pteval);
 				pteval = pte_mkwdeprived(pteval);
 				write_deprived_cnt++;
+				{
+					unsigned long pfn;
+					struct timeval tv;
+					extern void (*fault_logger_enqueue)
+						(unsigned long, struct timeval *, bool);
+
+					do_gettimeofday(&tv);
+					pfn = pte_pfn(pteval);
+					fault_logger_enqueue(pfn, &tv, false);
+				}
 			}
 		}else{
 			// A new pte is going to be set.
@@ -1296,6 +1306,16 @@ void set_pte_at(struct mm_struct *mm, unsigned long addr,
 				pteval = pte_wrprotect(pteval);
 				pteval = pte_mkwdeprived(pteval);
 				write_deprived_cnt++;
+				{
+					unsigned long pfn;
+					struct timeval tv;
+					extern void (*fault_logger_enqueue)
+						(unsigned long, struct timeval *, bool);
+
+					do_gettimeofday(&tv);
+					pfn = pte_pfn(pteval);
+					fault_logger_enqueue(pfn, &tv, false);
+				}
 			}else {	//RDONLY==1
 				//do nothing.	
 				read_only_cnt++;

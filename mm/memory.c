@@ -3559,6 +3559,16 @@ int handle_pte_fault(struct mm_struct *mm,
 								/*task_pid_nr(current), vma->vm_mm->token_tail, address, */
 								/*(unsigned long)prev_pte, new_pteval, pteval_orig, page_cnt);*/
 
+					{
+						unsigned long pfn;
+						struct timeval tv;
+						extern void (*fault_logger_enqueue)
+							(unsigned long, struct timeval *, bool);
+
+						do_gettimeofday(&tv);
+						pfn = pte_pfn(new_pteval);
+						fault_logger_enqueue(pfn, &tv, false);
+					}
 				}
 				spin_unlock(ptl);
 			}else{
@@ -3604,11 +3614,11 @@ int handle_pte_fault(struct mm_struct *mm,
 				unsigned long pfn;
 				struct timeval tv;
 				extern void (*fault_logger_enqueue)
-					(unsigned long, struct timeval *);
+					(unsigned long, struct timeval *, bool);
 
 				do_gettimeofday(&tv);
 				pfn = pte_pfn(entry);
-				fault_logger_enqueue(pfn, &tv);
+				fault_logger_enqueue(pfn, &tv, true);
 			}
 
 			// Count write fault.

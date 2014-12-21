@@ -19,13 +19,13 @@
 struct circ_buf fault_log;
 spinlock_t	fault_log_enqueue_lock;
 spinlock_t	fault_log_dequeue_lock;
-#define FAULT_LOG_SIZE (1<<20)
+#define FAULT_LOG_SIZE (1<<22)
 typedef struct fault_log_struct {
 	struct timeval 	tv;
 	unsigned long	pfn;
 	pid_t pid;
 	char comm[TASK_COMM_LEN];
-
+	bool write;
 } fault_log_t;
 DECLARE_WAIT_QUEUE_HEAD(fault_log_wq);
 
@@ -38,7 +38,7 @@ static DEFINE_MUTEX(fl_open_mutex);
 static DEFINE_MUTEX(fl_close_mutex);
 static DEFINE_MUTEX(fl_read_mutex);
 
-void fault_log_enqueue(unsigned long pfn, struct timeval *tv)
+void fault_log_enqueue(unsigned long pfn, struct timeval *tv, bool write)
 {
 	unsigned long head;
 	unsigned long tail;
@@ -64,6 +64,7 @@ void fault_log_enqueue(unsigned long pfn, struct timeval *tv)
 	f->tv = *tv;
 	f->pid = current->pid;
 	snprintf(f->comm, TASK_COMM_LEN, "%s", current->comm);
+	f->write = write;
 
 	smp_wmb();
 	fault_log.head = (head + 1) & (FAULT_LOG_SIZE - 1);
@@ -95,6 +96,7 @@ int fault_log_dequeue(fault_log_t *fault)
 	fault->tv = f->tv;
 	fault->pid = f->pid;
 	snprintf(fault->comm, TASK_COMM_LEN, "%s", f->comm);
+	fault->write = f->write;
 
 	smp_mb();
 	fault_log.tail = (tail + 1) & (FAULT_LOG_SIZE - 1);
@@ -129,7 +131,7 @@ static int fl_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
-static ssize_t fl_read(struct file *filp, char __user *buf, 
+static ssize_t fl_read(struct file *filp, char __user *buf,
 			size_t count, loff_t *ppos)
 {
 	ssize_t bytes = 0;
@@ -143,15 +145,16 @@ static ssize_t fl_read(struct file *filp, char __user *buf,
 		ret = fault_log_dequeue(&f);
 		if (ret == 0)
 			break;
-		bytes += snprintf(fl_buf + bytes, 4096 - bytes, 
-				"%d %s 0x%lx %ld.%06ld\n",
-				f.pid, f.comm, f.pfn, f.tv.tv_sec, f.tv.tv_usec);
+		bytes += snprintf(fl_buf + bytes, 4096 - bytes,
+				"%d %s %s 0x%lx %ld.%06ld\n",
+				f.pid, f.comm, f.write?"w":"d", f.pfn,
+				f.tv.tv_sec, f.tv.tv_usec);
 	} while (bytes < 4000);
 
 	remained_bytes = bytes;
 	do {
 		offset = bytes - remained_bytes;
-		remained_bytes = copy_to_user(buf + offset, 
+		remained_bytes = copy_to_user(buf + offset,
 					fl_buf + offset, remained_bytes);
 	} while (remained_bytes > 0);
 
